@@ -1,0 +1,96 @@
+1. I first began by downloading the starter code and using some commands to understand how randall
+works. 
+2. I then implemented this unit test in the Makefile:
+@if ./randall 20 | wc -c | grep -q "^20$$"; then \
+            echo "PASSED"; \
+        else \
+            echo "FAILED"; exit 1; \
+        fi
+This is to make sure that randall is ouputting the correct amount of bytes. If it does not, the
+program will output "FAILED" when make check is run. 
+3. I then created options.c and options.h with the first half of the code from the main section 
+(the handle_nbytes function).
+4. Next, I created rand64-hw.h and rand64-hw.c, with all the hardware code from the main.
+5. I did the same for rand64-sw.h and rand64-sw.c with all of the software code from the main.
+6. I then changed the Makefile to include the relevant files:
+    randall: randall.c options.c rand64-hw.c rand64-sw.c
+	$(CC) $(CFLAGS) randall.c options.c rand64-hw.c rand64-sw.c -o randall
+7. Then I ran the command "make check" which output "PASSED", so I know that I separated the functions correctly 
+8. Finally, I created the output.c and output.h files that have the function writebytes using the same method
+as above.
+9. Implemented argument parsing with getopt 
+    -I used a switch statement with different cases to handle the -i, -o, -h, and other options
+    -I had to implement the input and output options with extern char *optarg; and 
+    extern int optind; because the even with the header #include <unistd.h>, there was an error
+10. I had to modify the handle_nbytes function to include more than 2 arguments, so I check if
+optind >= argc to see whether I should throw an error. I also modified the rest of the function
+to check if (argc >= 2) and it takes argv[optind] instead of argv[1]
+11. Started implementing the handle_output function in output.c. rdrand is finished, so I just 
+pasted the functions that deal with hardware into this section. I also added error handling in
+the main function for if rdrand is not supported on the CPU. 
+12. Then, I implemented stdio in handle_output using the code from writebytes and the second half of the main 
+function. I tested this using the command ./randall 20, which outputted the correct number of bytes.
+13. During all of this, I put various print statements throughout my code to debug and see where
+issues arise.
+14. To implement the /F option for input, I first modified the software_rand64_init (const char *filename)
+function in rand64-sw.c to take in a filename argument AND check in handle_output if it is an 
+absolute path with strncmp(filename, "/", 1).
+15. I then checked if this worked using a test file.
+16. I added 3 functions to initialize, do, and finish the software implementation for mrand48_r
+to the rand64-sw.c file, and added the function declarations for the rand64-sw.h file. 
+17. In the unsigned long long software_mrand48_r(void); function, I had to use a left shift of 
+the first long (long1) to the upper 32 bits of the final long long, and then OR (|) it with long2
+to insert long2 into the lower 32 bits of the final long long to return the random value.
+18. Finally, for the mrand48_r implementation, I had to add it to output.c 
+    else if (strcmp(input, "mrand48_r") == 0) {
+        // Handles lrand48_r case
+        initialize = software_mrand48_r_init;
+        rand64 = software_mrand48_r;
+        finalize = software_mrand48_r_fini;
+    }
+19. I then tested this option with ./randall -i mrand48_r 20 | wc -c to see how many bytes are
+actually being outputted. 
+20. Parsed N and implemented checking for if N is a valid integer or not with stroll:
+    long long int N = strtoll (output, &endptr, 10);
+    -if this didn't work, I threw an error and exited the program
+21. Then, I wrote another function called:
+    handle_n_option(long long int N, int nbytes, unsigned long long int (*rand64)(void))
+        -This first writes all the necessary bytes to a buffer that I allocted with malloc 
+        -Writing to the buffer was done with another function called writebuffer, that took
+        the LSB in x (the random value) and wrote it to the buffer outbytes # of times
+        -The function then uses a while loop to extract N bytes from the buffer until it reaches
+        the max (which is nbytes). If nbytes-(the amount of bytes already done) is less than N,
+        I set N to that amount, which accounts for the rest of the bytes being less than N.
+        -Finally, I freed the buffer (allocated with malloc, freed with free)
+22. Then, I called handle_n_option(N, nbytes, rand64); in the handle_output function. 
+23. Testing:
+    I ran the sanity checks provided by Professor Eggert, which outputted:
+    time ./randall 133562368 >/dev/null
+        real    0m6.314s
+        user    0m6.160s
+        sys     0m0.032s
+    time ./randall 133562368 | cat >/dev/null
+        real    0m6.307s
+        user    0m6.139s
+        sys     0m0.277s
+    time ./randall 133562368 >rand.data
+        real    0m6.365s
+        user    0m6.105s
+        sys     0m0.142s
+24. And some of my own, which included 
+    time ./randall -i rdrand 133562368 >rand.data
+        real    0m6.473s
+        user    0m6.198s
+        sys     0m0.156s
+    time ./randall -i mrand48_r 133562368 >rand.data
+        real    0m4.093s
+        user    0m3.774s
+        sys     0m0.220s
+    time ./randall -i mrand48_r -o 10000 133562368 >rand.data
+        real    0m2.249s
+        user    0m0.940s
+        sys     0m0.224s
+    time ./randall -i mrand48_r -o 1000000 133562368 >rand.data (fastest)
+        real    0m2.200s
+        user    0m0.959s
+        sys     0m0.165s
